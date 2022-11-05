@@ -62,7 +62,7 @@
 </template>
 
 <script>
-import { Contract, Provider, Web3Provider } from "zksync-web3";
+import { Contract, Provider, Web3Provider, utils } from "zksync-web3";
 import { ethers } from "ethers";
 
 // eslint-disable-next-line
@@ -71,7 +71,7 @@ const GREETER_CONTRACT_ADDRESS = "0xb0b8b267d44c64BA6dD1Daf442949887c85199f6"; /
 const GREETER_CONTRACT_ABI = require("./abi.json"); // Add link to the ABI
 
 const ETH_L1_ADDRESS = "0x0000000000000000000000000000000000000000";
-const allowedTokens = require("./eth.json");
+const allowedTokens = require("./erc20.json");
 
 export default {
   name: "App",
@@ -137,7 +137,32 @@ export default {
     },
     async getOverrides() {
       if (this.selectedToken.l1Address != ETH_L1_ADDRESS) {
-        // TODO: Return data for the paymaster
+        // Return data for the paymaster
+        const testnetPaymaster =
+          await this.provider.getTestnetPaymasterAddress();
+
+        const gasPrice = await this.provider.getGasPrice();
+        const gasLimit = await this.contract.estimateGas.setGreeting(
+          this.newGreeting
+        );
+        const fee = gasPrice.mul(gasLimit);
+
+        const paymasterParams = utils.getPaymasterParams(testnetPaymaster, {
+          type: "ApprovalBased",
+          token: this.selectedToken.l2Address,
+          minimalAllowance: fee,
+          innerInput: new Uint8Array(),
+        });
+
+        return {
+          maxFeePerGas: gasPrice,
+          maxPriorityFeePerGas: ethers.BigNumber.from(0),
+          gasLimit,
+          customData: {
+            ergsPerPubdata: utils.DEFAULT_ERGS_PER_PUBDATA_LIMIT,
+            paymasterParams,
+          },
+        };
       }
 
       return {};
